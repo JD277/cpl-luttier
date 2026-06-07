@@ -6,53 +6,27 @@ import sys
 import time
 
 class STTEngine:
-    """
-    Motor de Reconocimiento de Voz en Tiempo Real usando Vosk.
-    Combina detección de palabra clave (Wake Word) y transcripción por VAD.
-    """
+    """Motor STT con Vosk. Crea reconocedores frescos para cada tarea."""
     
-    def __init__(self, model_path="vosk-model-small-es-0.42", lang="es", sample_rate=16000, 
-                 block_size=8000, keyword="epa", silence_duration=2):
-        """
-        Inicializa el motor de STT.
-        
-        Args:
-            model_path (str): Ruta al modelo Vosk. Si es None, usa lang.
-            lang (str): Código de idioma para el modelo por defecto.
-            sample_rate (int): Frecuencia de muestreo del audio.
-            block_size (int): Tamaño del bloque de audio.
-            keyword (str): Palabra clave para activar la escucha.
-            silence_duration (float): Segundos de silencio para finalizar.
-        """
+    def __init__(self, model_path="vosk-model-small-es-0.42", sample_rate=16000, 
+                block_size=8000, silence_duration=2.0):
         self.sample_rate = sample_rate
         self.block_size = block_size
-        self.keyword = keyword.lower()
-        self.silence_threshold = int(silence_duration * (sample_rate / block_size))
+        # ✅ Guardamos los segundos reales para usar con time.time()
+        self.silence_duration = float(silence_duration) 
         
-        # Cola para datos de audio
-        self.audio_queue = queue.Queue()
-        
-        # Inicializar modelo Vosk
         try:
-            if model_path:
-                self.model = Model(model_path)
-            else:
-                self.model = Model(lang=lang)
-            print(f"✅ Modelo Vosk cargado correctamente")
+            self.model = Model(model_path)
+            print(f"✅ Modelo Vosk cargado: {model_path}")
         except Exception as e:
-            raise Exception(f"❌ Error al cargar el modelo Vosk: {e}")
+            raise RuntimeError(f" Error cargando modelo Vosk: {e}")
         
-        # Estado del sistema
-        self.is_listening = False
-
     def _audio_callback(self, indata, frames, time_info, status):
-        """Callback interno para capturar audio desde el micrófono."""
         if status:
             print(f"⚠️ Audio Status: {status}", file=sys.stderr)
         self.audio_queue.put(bytes(indata))
 
     def _create_stream(self):
-        """Crea y retorna un stream de audio configurado."""
         return sd.RawInputStream(
             samplerate=self.sample_rate,
             blocksize=self.block_size,
@@ -61,53 +35,52 @@ class STTEngine:
             callback=self._audio_callback
         )
 
-    def wait_for_keyword(self):
-        """
-        Bloquea la ejecución hasta detectar la palabra clave.
+    def wait_for_keyword(self, word):
+        """Bloquea hasta detectar la palabra clave. Reconocedor NUEVO."""
+        self.audio_queue = queue.Queue()
+        # IMPORTANTE: Nuevo reconocedor para esta tarea específica
+        rec = KaldiRecognizer(self.model, self.sample_rate)
         
-        Returns:
-            bool: True si se detectó la keyword, False si hubo error.
-        """
-        recognizer = KaldiRecognizer(self.model, self.sample_rate)
-        #print(f"🎤 Esperando palabra clave: '{self.keyword}'...")
+        print(f"🎤 Esperando keyword: '{word}'...")
         
         try:
             with self._create_stream():
-                while self.is_listening or not self.audio_queue.empty():
+                while True:
                     try:
-                        data = self.audio_queue.get(timeout=0.5)
+                        data = self.audio_queue.get(timeout=1.0)
                     except queue.Empty:
                         continue
                     
-                    if recognizer.AcceptWaveform(data):
-                        result = json.loads(recognizer.Result())['text']
-                        if self.keyword in result:
-                            print(f"✅ Keyword detectada: '{self.keyword}'")
+                    # AcceptWaveform devuelve True cuando hay una frase completa
+                    if rec.AcceptWaveform(data):
+                        result = json.loads(rec.Result())['text']
+                        print(f"   📝 Resultado completo: '{result}'")
+                        if result and word.lower() in result.lower():
+                            print(f"✅ Keyword detectada: '{word}'")
                             return True
                     else:
-                        partial = json.loads(recognizer.PartialResult())['partial']
-                        print(f"🔍 Escuchando... (parcial: '{partial}')", end='\r') 
-                        if self.keyword in partial:
-                            print(f"✅ Keyword detectada (parcial): '{self.keyword}'")
+                        # PartialResult da feedback en tiempo real sin cerrar frase
+                        partial = json.loads(rec.PartialResult())['partial']
+                        print(f"   📝 Resultado parcial: '{partial}'")
+                        if partial and word.lower() in partial.lower():
+                            print(f"✅ Keyword detectada (parcial): '{word}'")
                             return True
+                            
         except KeyboardInterrupt:
-            print("\n🛑 Interrupción durante espera de keyword")
+            print("\n🛑 Interrupción en espera de keyword")
             return False
         except Exception as e:
             print(f"❌ Error en wait_for_keyword: {e}")
             return False
 
     def transcribe_until_silence(self):
-        """
-        Transcribe audio hasta detectar un periodo de silencio.
+        """Transcribe hasta detectar silencio real medido por tiempo."""
+        self.audio_queue = queue.Queue()
+        rec = KaldiRecognizer(self.model, self.sample_rate)
         
-        Returns:
-            str: Texto transcrito o string vacío.
-        """
-        recognizer = KaldiRecognizer(self.model, self.sample_rate)
-        print("🎙️ Escuchando... (habla ahora)")
+        print("🎙️ Escuchando... (di 'Terminar' para salir)")
         
-        silence_counter = 0
+        last_activity_time = time.time()  # Marca inicial de actividad
         final_text = ""
         
         try:
@@ -118,20 +91,28 @@ class STTEngine:
                     except queue.Empty:
                         continue
                     
-                    if recognizer.AcceptWaveform(data):
-                        result = json.loads(recognizer.Result())['text']
-                        if result:
-                            silence_counter = 0
-                            final_text += f" {result}"
-                    else:
-                        partial = json.loads(recognizer.PartialResult())['partial']
-                        if partial == "":
-                            silence_counter += 1
-                        else:
-                            silence_counter = 0
+                    current_time = time.time()
+                    has_activity = False
                     
-                    if silence_counter > self.silence_threshold:
-                        print("⏸️ Silencio detectado, finalizando...")
+                    if rec.AcceptWaveform(data):
+                        result = json.loads(rec.Result())['text']
+                        if result:
+                            has_activity = True
+                            final_text += f" {result}"
+                            print(f"   📝 Detectado: '{result}'")
+                    else:
+                        partial = json.loads(rec.PartialResult())['partial']
+                        if partial:
+                            has_activity = True
+                    
+                    # Actualizar marca de tiempo solo si hubo actividad real
+                    if has_activity:
+                        last_activity_time = current_time
+                    
+                    # Calcular silencio REAL acumulado
+                    silence_elapsed = current_time - last_activity_time
+                    if silence_elapsed >= self.silence_duration:
+                        print(f"⏸️ Silencio de {silence_elapsed:.1f}s detectado.")
                         break
                         
         except KeyboardInterrupt:
@@ -141,81 +122,8 @@ class STTEngine:
             print(f"❌ Error en transcripción: {e}")
             return ""
         
-        # Obtener resultado final pendiente
-        final_result = json.loads(recognizer.FinalResult())['text']
+        final_result = json.loads(rec.FinalResult())['text']
         if final_result:
             final_text += f" {final_result}"
             
         return final_text.strip()
-
-    def listen_and_transcribe(self):
-        """
-        Flujo completo: Espera keyword -> Transcribe -> Retorna texto.
-        
-        Returns:
-            str: Texto transcrito o string vacío.
-        """
-        self.is_listening = True
-        
-        try:
-            # Paso 1: Detectar keyword
-            if not self.wait_for_keyword():
-                return ""
-            
-            # Pausa breve y limpieza de buffer
-            time.sleep(0.3)
-            while not self.audio_queue.empty():
-                try:
-                    self.audio_queue.get_nowait()
-                except queue.Empty:
-                    break
-            
-            # Paso 2: Transcribir
-            text = self.transcribe_until_silence()
-            
-            if text:
-                print(f"📝 Resultado: '{text}'")
-            
-            return text
-            
-        finally:
-            self.is_listening = False
-
-    def stop(self):
-        """Detiene cualquier operación de escucha activa."""
-        self.is_listening = False
-        print("🛑 Motor STT detenido")
-
-
-# ==================== EJEMPLO DE USO ====================
-if __name__ == "__main__":
-    # Inicializar el motor
-    stt = STTEngine(
-        keyword="epa",
-        silence_duration=1.5,
-        # model_path="models/vosk-model-small-es-0.42"  # Descomentar si usas ruta local
-    )
-    
-    print("=" * 50)
-    print("Sistema STT POO listo")
-    print("=" * 50)
-    
-    try:
-        while True:
-            texto = stt.listen_and_transcribe()
-            
-            if texto:
-                # Aquí integras con tu lógica de negocio
-                print(f"🔧 Procesando comando: {texto}")
-                # ejemplo: enviar_a_firestore(texto)
-                # ejemplo: enviar_comando_serial(texto)
-            
-            continuar = input("\n¿Escuchar de nuevo? (s/n): ").lower()
-            if continuar != 's':
-                break
-                
-    except KeyboardInterrupt:
-        print("\n👋 Programa finalizado por usuario")
-    finally:
-        stt.stop()
-
