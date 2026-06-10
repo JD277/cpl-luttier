@@ -7,7 +7,7 @@ from stt_manager import STTEngine
 from tts import speak
 
 # Configuración
-API_KEY = "AQ.Ab8RN6KsJfvblNoU_FZpfsxivjsU7mmN55FefyUig7VairbSDA"
+API_KEY = ""
 MAX_EMPTY_ATTEMPTS = 3
 GRACE_PERIOD = 5.0
 
