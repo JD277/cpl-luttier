@@ -26,4 +26,3 @@ def ask_n8n_with_imagefile(filename: str, tipo_de_foto: str) -> dict:
     response.raise_for_status()
     return response.json()
 
-ask_n8n_with_imagefile("1000581423.jpg", "caja")

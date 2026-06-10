@@ -1,16 +1,13 @@
-from gemini import GeminiManager
+from get_image import capturar_imagenes_luthierbot
+from n8n_request import ask_n8n_with_multiple_images
 
-gemini = GeminiManager(
-    model_name="gemma-4-31b-it", 
-    api_key="AIzaSyCUJ43mng-KzhWzmBT8S_DfzF2U9FyTGOs",
-    system_instruction=(
-        "Eres Lutier, un asistente de voz conciso y amigable. "
-        "Responde SIEMPRE en español usando máximo una oración corta. "
-        "PROHIBIDO mostrar procesos de pensamiento, listas, viñetas o notas internas. "
-        "NUNCA expliques cómo construiste la respuesta. "
-        "Solo emite la frase final de forma natural y directa."
-    )
-)
-
-response = gemini.send_message("Hola, ¿cómo estás?")
-print(f"Respuesta de Gemini: {response}")
+        # 1. Capturar las fotos usando la función interna de 3 fotos por cámara
+print("📸 Solicitando captura de imágenes de los cuatros...")
+lista_fotos = capturar_imagenes_luthierbot(capturas_por_camara=3)
+if lista_fotos:
+    print(f"📤 Enviando {len(lista_fotos)} imágenes recopiladas a n8n...")
+    # 2. Enviar las imágenes en Base64 al servidor de n8n bajo la etiqueta "caja"
+    respuesta_n8n = ask_n8n_with_multiple_images(lista_fotos, "caja")
+    print(f"✅ Respuesta de n8n recibida con éxito: {respuesta_n8n}")
+else:
+        print("⚠️ No se pudieron recopilar fotos de las cámaras.")
