@@ -26,3 +26,28 @@ def ask_n8n_with_imagefile(filename: str, tipo_de_foto: str) -> dict:
     response.raise_for_status()
     return response.json()
 
+def ask_n8n_with_multiple_imagefiles(filenames: list, tipo_de_foto: str) -> dict:
+    """
+    Send a request to the n8n API with multiple image files
+    Args:
+        filenames (list): List of file names to send
+        tipo_de_foto (str): Type of photo to send to the API
+    Returns:
+        dict: Response from the API
+    """
+    headers = {"Content-Type": "application/json"}
+    
+    images_b64 = []
+    for filename in filenames:
+        with open(filename, "rb") as f:
+            img_b64 = base64.b64encode(f.read()).decode("utf-8")
+            images_b64.append(img_b64)
+        
+    data = {
+        "images_base64": images_b64,
+        "tipoDeFoto": tipo_de_foto
+    }
+    
+    response = requests.post(URL_TEXT, headers=headers, json=data)
+    response.raise_for_status()
+    return response.json()

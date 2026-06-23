@@ -2,12 +2,12 @@ import os
 import time
 from gemini import GeminiManager
 from get_image import capturar_imagenes_luthierbot
-from n8n_request import ask_n8n_with_multiple_images
+from n8n_request import *
 from stt_manager import STTEngine
 from tts import speak
 
 # Configuración
-API_KEY = ""
+API_KEY = "AQ.Ab8RN6KlBbCuRf4UzB_OpeeoOnKgR7-OKR5JsQXTXeCGvgcS3w"
 MAX_EMPTY_ATTEMPTS = 3
 GRACE_PERIOD = 5.0
 

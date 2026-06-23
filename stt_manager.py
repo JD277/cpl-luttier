@@ -54,14 +54,14 @@ class STTEngine:
                     # AcceptWaveform devuelve True cuando hay una frase completa
                     if rec.AcceptWaveform(data):
                         result = json.loads(rec.Result())['text']
-                        print(f"   📝 Resultado completo: '{result}'")
+                        #print(f"   📝 Resultado completo: '{result}'")
                         if result and word.lower() in result.lower():
                             print(f"✅ Keyword detectada: '{word}'")
                             return True
                     else:
                         # PartialResult da feedback en tiempo real sin cerrar frase
                         partial = json.loads(rec.PartialResult())['partial']
-                        print(f"   📝 Resultado parcial: '{partial}'")
+                        #print(f"   📝 Resultado parcial: '{partial}'")
                         if partial and word.lower() in partial.lower():
                             print(f"✅ Keyword detectada (parcial): '{word}'")
                             return True
