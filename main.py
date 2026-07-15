@@ -4,10 +4,10 @@ from gemini import GeminiManager
 from get_image import capturar_imagenes_luthierbot
 from n8n_request import *
 from stt_manager import STTEngine
-from tts import speak
+from salome import speak
 
 # Configuración
-API_KEY = "AQ.Ab8RN6KlBbCuRf4UzB_OpeeoOnKgR7-OKR5JsQXTXeCGvgcS3w"
+API_KEY = "AQ.Ab8RN6JuuvqC7lZM7m1wWxgur2eBGof2XIahJ6Up0WKFEuLrxQ"
 MAX_EMPTY_ATTEMPTS = 3
 GRACE_PERIOD = 5.0
 
@@ -24,7 +24,7 @@ gemini = GeminiManager(
     temperature=0.5,
 )
 
-vosk = STTEngine()
+vosk = STTEngine(silence_duration=5)
 
 MODE_INSTRUCTIONS = {
     "mod": "Modo Modificación: Espera instrucción específica del usuario para aplicar cambios al cuatro.",
@@ -33,12 +33,12 @@ MODE_INSTRUCTIONS = {
 }
 
 
-def announce_mode(mode: str):
+AWAIT def announce_mode(mode: str):
     msg = f"Entrando al modo {mode}"
     print(f"🔊 {msg}")
     # ✅ Pausa crítica: libera recursos de red/STT antes de hablar
     time.sleep(0.3)
-    speak(msg)
+    await speak(msg)
 
 
 def get_mode(text: str) -> str | None:
@@ -203,7 +203,7 @@ while True:
 
         if not current_mode:
             print("❌ Modo no reconocido")
-            safe_speak("Di Mod, Revisión o Conversación")
+            speak("Di Mod, Revisión o Conversación")
             continue
 
         announce_mode(current_mode.upper())
